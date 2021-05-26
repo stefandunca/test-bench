@@ -1,0 +1,9 @@
+
+set(QML_IMPORT_PATH ${CMAKE_CURRENT_SOURCE_DIR} CACHE STRING "" FORCE)
+
+target_sources(${PROJECT_NAME}
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.txt
+
+        ${CMAKE_CURRENT_SOURCE_DIR}/qml.qrc
+)
