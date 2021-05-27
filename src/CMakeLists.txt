@@ -9,4 +9,6 @@ target_sources(${PROJECT_NAME}
         ${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.txt
 
         ${CMAKE_CURRENT_SOURCE_DIR}/main.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/AppContext.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/AppContext.cpp
 )

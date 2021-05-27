@@ -27,7 +27,7 @@ Item {
 
         _views.pop();
 
-        if(_views.length > 1)
+        if(_views.length > 0)
             root.currentView = _views[_views.length - 1];
         else
             root.currentView = null

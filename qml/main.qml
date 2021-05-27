@@ -5,6 +5,7 @@ import custom.Controls 1.0
 import "Views" as Views
 
 Window {
+    id: root
     width: 720
     height: 1024
     visible: true
@@ -15,6 +16,8 @@ Window {
         id: mediaView
         Views.MediaView {
             onShowPIP: stackView.push(pipView.createObject(stackView));
+            onGoBack: stackView.pop();
+            onFullScreenChanged: root.visibility = fullScreen ? Window.FullScreen : Window.Windowed;
         }
     }
     Component {
@@ -36,7 +39,16 @@ Window {
         anchors.fill: parent
 
         Views.IntroView {
-            onShowVideo: stackView.push(mediaView.createObject(stackView))
+            onShowVideo: stackView.push(mediaView.createObject(stackView));
         }
+    }
+
+    Keys.onBackPressed: {
+        event.accepted = true;
+        viewLoader.pop();
+    }
+    Keys.onEscapePressed: {
+        event.accepted = true;
+        viewLoader.pop();
     }
 }

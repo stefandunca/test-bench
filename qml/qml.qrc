@@ -6,5 +6,7 @@
         <file>Views/IntroView.qml</file>
         <file>Views/MediaView.qml</file>
         <file>Views/PipView.qml</file>
+        <file>custom/Controls/Context.qml</file>
+        <file>Views/PlayerView.qml</file>
     </qresource>
 </RCC>

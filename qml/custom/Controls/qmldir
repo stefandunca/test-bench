@@ -1,3 +1,5 @@
 module custom.Controls
 
 StackView 1.0 StackView.qml
+
+singleton Context 1.0 Context.qml

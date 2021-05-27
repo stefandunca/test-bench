@@ -43,6 +43,7 @@ else()
 endif()
 
 add_subdirectory(qml)
+add_subdirectory(res)
 add_subdirectory(src)
 
 target_compile_definitions(${PROJECT_NAME}

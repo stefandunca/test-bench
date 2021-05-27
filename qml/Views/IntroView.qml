@@ -1,5 +1,6 @@
 import QtQuick 2.15
 import QtQuick.Controls 2.15
+import QtQuick.Layouts 1.15
 
 Item {
     id: root
@@ -12,19 +13,32 @@ Item {
     // Private
     //
 
-    Text {
-        id: textLabel
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.top: parent.top
-        text: "Intro View here"
-    }
+    ColumnLayout {
+        id: mainLayout
 
-    Button {
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.top: textLabel.bottom
-        anchors.margins: 10
+        spacing: 10
+        anchors.fill: parent
 
-        text: "See Video"
-        onClicked: root.showVideo()
+        Item {
+            Layout.fillHeight: true
+        }
+
+        Text {
+            Layout.alignment: Qt.AlignHCenter
+
+            id: textLabel
+            text: "Intro View here"
+        }
+
+        Button {
+            Layout.alignment: Qt.AlignHCenter
+
+            text: "See Video"
+            onClicked: root.showVideo()
+        }
+
+        Item {
+            Layout.fillHeight: true
+        }
     }
 }
