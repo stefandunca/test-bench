@@ -77,7 +77,7 @@ Item {
 
                 text: "Back"
 
-                visible: !Context.isMobilePlatform
+                //visible: !Context.isMobilePlatform
 
                 onClicked: root.goBack()
             }
