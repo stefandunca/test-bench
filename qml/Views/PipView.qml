@@ -2,13 +2,12 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 
-import QtMultimedia 5.15
-
 Item {
     id: root
 
     // API
     //
+    signal goForward()
     signal goBack()
 
     // Private
@@ -46,6 +45,12 @@ Item {
         }
 
         RowLayout {
+            Button {
+                Layout.margins: 20
+
+                text: "Move Forward"
+                onClicked: root.goForward()
+            }
 
             Item {
                 Layout.fillWidth: true

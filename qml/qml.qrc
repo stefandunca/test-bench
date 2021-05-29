@@ -8,5 +8,6 @@
         <file>Views/PipView.qml</file>
         <file>custom/Controls/Context.qml</file>
         <file>Views/PlayerView.qml</file>
+        <file>Views/DynamicView.qml</file>
     </qresource>
 </RCC>

@@ -13,42 +13,44 @@ Window {
     title: qsTr("Test Bench")
 
     Component {
-        id: mediaView
-        Views.MediaView {
-            onShowPIP: stackView.push(pipView.createObject(stackView));
-            onGoBack: stackView.pop();
-            onFullScreenChanged: root.visibility = fullScreen ? Window.FullScreen : Window.Windowed;
-        }
-    }
-    Component {
-        id: pipView
-        Views.PipView {
+        id: dynamicViewComponent
+        Views.DynamicView {
             onGoBack: stackView.pop();
         }
     }
 
-    Loader {
-        id: viewLoader
-    }
-
-    // TODO: if desktop add a drawer and a navigation bar
-    // TODO: if mobile use the system's navigation bar
     StackView {
         id: stackView
 
         anchors.fill: parent
 
-        Views.IntroView {
-            onShowVideo: stackView.push(mediaView.createObject(stackView));
-        }
-    }
+        initialItem: introView
 
-    Keys.onBackPressed: {
-        event.accepted = true;
-        viewLoader.pop();
-    }
-    Keys.onEscapePressed: {
-        event.accepted = true;
-        viewLoader.pop();
+        Views.PipView {
+            id: pipView
+            onGoBack: stackView.pop();
+            onGoForward: stackView.push(dynamicViewComponent.createObject(stackView))
+        }
+        Views.MediaView {
+            id: mediaView
+            onShowPIP: stackView.push(pipView);
+            onGoBack: stackView.pop();
+            onFullScreenChanged: root.visibility = fullScreen ? Window.FullScreen : Window.Windowed;
+        }
+        Views.IntroView {
+            id: introView
+            onShowVideo: stackView.push(mediaView);
+        }
+
+        focus: true
+        Keys.onReleased: {
+            if(event.key === Qt.Key_Back || event.key === Qt.Key_Backspace) {
+                event.accepted = true;
+                if(stackView.count > 1)
+                    stackView.pop();
+                else
+                    Qt.quit()
+            }
+        }
     }
 }
