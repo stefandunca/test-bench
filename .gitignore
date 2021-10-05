@@ -60,9 +60,8 @@ Thumbs.db
 *vcxproj.*
 
 # VScode
-/.vscode
-/.history
-/CMakeLists.txt.user
+.vscode
+.history
 
 # MinGW generated files
 *.Debug
@@ -76,3 +75,5 @@ Thumbs.db
 *.dll
 *.exe
 
+# C++
+CMakeLists.txt.user*

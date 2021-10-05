@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.19)
 
-project(QmlCustomViewTest VERSION 0.1 LANGUAGES CXX)
+project(QtQmlAppTemplate VERSION 0.1 LANGUAGES CXX)
 
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
@@ -22,8 +22,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 #    endif()
 #endif()
 
+# Force 5 for now, QT6 doesn't have multimedia yet
+set(QT_DEFAULT_MAJOR_VERSION 5)
 find_package(QT NAMES Qt6 Qt5 COMPONENTS Core Quick Multimedia REQUIRED)
+set(QT_VERSION_MAJOR 5)
 find_package(Qt${QT_VERSION_MAJOR} COMPONENTS Core Quick Multimedia REQUIRED)
+message("Using QT version: ${QT_VERSION_MAJOR}.${QT_VERSION_MINOR}.${QT_VERSION_PATCH}")
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
     qt_add_executable(${PROJECT_NAME}
