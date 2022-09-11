@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/">
+        <file>demo/Chat/ChatView.qml</file>
+        <file>demo/Chat/qmldir</file>
+    </qresource>
+</RCC>

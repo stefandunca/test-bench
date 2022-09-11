@@ -1,0 +1,4 @@
+module demo.Communities
+plugin Communities
+
+CommunitiesView 1.0 CommunitiesView.qml

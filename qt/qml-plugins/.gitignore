@@ -1,0 +1,11 @@
+build
+cd 
+# vscode
+/.history/
+/.vscode/
+
+# QtCreator
+CMakeLists.txt.user
+
+#
+.
