@@ -3,12 +3,11 @@ package learning
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"math"
 	"math/big"
 	"os"
+	"strings"
 	"testing"
-	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -21,46 +20,53 @@ type ethTestData struct {
 	PrivateKeys []string `json:"private_keys"`
 }
 
-func testClient() (client *ethclient.Client, testData *ethTestData, ganache *Ganache) {
-	var err error
-	client, err = ethclient.Dial("http://localhost:8545")
-	if err != nil {
-		panic(err)
-	}
-
+func testClient() (client *ethclient.Client, testData *ethTestData, ganache *Ganache, tearDown func()) {
 	optDataFilePath := os.Getenv("TEST_DATA_FILE")
 	if optDataFilePath != "" {
 		testData = readTestData(optDataFilePath)
 	}
 
-	ganache = NewGanache(false)
-	return client, testData, ganache
+	ganache = NewGanache()
+	return ganache.EthClient(), testData, ganache, func() {
+		ganache.Close()
+	}
+}
+
+func testClientWithBlocks() (client *ethclient.Client, testData *ethTestData, ganache *Ganache, tearDown func()) {
+	optDataFilePath := os.Getenv("TEST_DATA_FILE")
+	if optDataFilePath != "" {
+		testData = readTestData(optDataFilePath)
+	}
+
+	ganache = NewGanacheWithStandardBlocks(10)
+	return ganache.EthClient(), testData, ganache, func() {
+		ganache.Close()
+	}
 }
 
 type TestTransaction struct {
-	From    string
-	To      string
+	From    common.Address
+	To      common.Address
 	Balance *big.Int
 }
 
-// func generateTransactions() []TestTransaction {
-// 	return []TestTransaction{
-// 		{
-// 			From:    "",
-// 			To:      "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359",
-// 			Balance: big.NewInt(100),
-// 		}}
-// }
+func generateTransactions(ganache *Ganache, blocksWithTransactions map[int][]TestTransaction) error {
+	processedBlocks := 0
+	err := MineBlocks(ganache, func(blockNo int) (blockInfo *BlockInfo, stop bool) {
+		if processedBlocks == len(blocksWithTransactions) {
+			return nil, true
+		}
+		if transactions, found := blocksWithTransactions[blockNo]; found {
+			for _, _ /*tx*/ = range transactions {
+				// TODO: send transaction
+			}
+			processedBlocks++
+		}
+		return &BlockInfo{standardBlockDuration}, false
+	})
 
-// func testClientWithTransactions(transactions []TestTransaction) (*ethclient.Client, *ethTestData, *Ganache) {
-// 	client, data, ganache := testClient()
-
-// 	for _, tx := range transactions {
-// 		// TODO: transactions
-// 		_ = tx
-// 	}
-// 	return client, data, ganache
-// }
+	return err
+}
 
 func balanceToEther(balance *big.Int) float64 {
 	res, _ := new(big.Float).Quo(new(big.Float).SetInt(balance), big.NewFloat(math.Pow10(18))).Float64()
@@ -100,7 +106,8 @@ func TestConvertAddresses(t *testing.T) {
 }
 
 func TestGetBalanceLastBlock(t *testing.T) {
-	client, _, ganache := testClient()
+	client, _, ganache, tearDown := testClientWithBlocks()
+	defer tearDown()
 
 	addresses, err := ganache.AvailableAddresses()
 	require.NoError(t, err)
@@ -113,7 +120,8 @@ func TestGetBalanceLastBlock(t *testing.T) {
 }
 
 func TestGetBalanceFirstBlock(t *testing.T) {
-	client, _, ganache := testClient()
+	client, _, ganache, tearDown := testClientWithBlocks()
+	defer tearDown()
 
 	addresses, err := ganache.AvailableAddresses()
 	require.NoError(t, err)
@@ -124,17 +132,71 @@ func TestGetBalanceFirstBlock(t *testing.T) {
 }
 
 func TestHeaderByNumberLast(t *testing.T) {
-	client, _, _ := testClient()
+	client, _, _, tearDown := testClientWithBlocks()
+	defer tearDown()
 
 	lastHeader, err := client.HeaderByNumber(context.Background(), nil)
 	require.NoError(t, err)
 	require.NotNil(t, lastHeader)
-	require.Greater(t, 1, lastHeader.Number.Cmp(big.NewInt(0)), "last block should be greater")
+	require.Greater(t, lastHeader.Number.Cmp(big.NewInt(0)), 0, "last block should be greater")
 
 	firstHeader, err := client.HeaderByNumber(context.Background(), big.NewInt(0))
 	require.NoError(t, err)
 	require.NotNil(t, firstHeader)
 	require.Equal(t, int64(0), firstHeader.Number.Int64())
-
-	fmt.Print(time.Unix(int64(firstHeader.Time), 0).Sub(time.Unix(int64(firstHeader.Time), 0)))
+	require.Greater(t, lastHeader.Time, firstHeader.Time, "last timestamp should be greater than")
 }
+
+func TestBlockByNumber(t *testing.T) {
+	client, _, _, tearDown := testClientWithBlocks()
+	defer tearDown()
+
+	lastBlock, err := client.BlockByNumber(context.Background(), nil)
+	require.NoError(t, err)
+	require.NotNil(t, lastBlock)
+	require.Greater(t, lastBlock.Number().Cmp(big.NewInt(0)), 0, "last block should be greater")
+
+	firstBlock, err := client.BlockByNumber(context.Background(), big.NewInt(0))
+	require.NoError(t, err)
+	require.NotNil(t, firstBlock)
+	require.Equal(t, int64(0), firstBlock.Number().Int64())
+
+	require.Greater(t, lastBlock.Time(), firstBlock.Time(), "last timestamp should be greater than")
+	require.Equal(t, 0, len(lastBlock.Transactions()), "no transactions expected, mined empty blocks")
+	require.True(t, strings.Contains(strings.ToLower(lastBlock.Hash().Hex()), "0x"))
+	require.Equal(t, uint64(1), lastBlock.Difficulty().Uint64())
+}
+
+// TODO: enable after finishing generateTransactions
+// func TestTransactionCount(t *testing.T) {
+// 	client, _, ganache, tearDown := testClient()
+// 	defer tearDown()
+
+// 	addresses, err := ganache.AvailableAddresses()
+// 	require.NoError(t, err)
+// 	require.Greater(t, len(addresses), 3)
+
+// 	err = generateTransactions(ganache,
+// 		map[int][]TestTransaction{
+// 			3: {
+// 				{
+// 					From:    addresses[0],
+// 					To:      addresses[1],
+// 					Balance: big.NewInt(100),
+// 				},
+// 				{
+// 					From:    addresses[2],
+// 					To:      addresses[3],
+// 					Balance: big.NewInt(1000),
+// 				},
+// 			},
+// 		})
+// 	require.NoError(t, err)
+
+// 	block, err := client.BlockByNumber(context.Background(), big.NewInt(3))
+// 	require.NoError(t, err)
+
+// 	count, err := client.TransactionCount(context.Background(), block.Hash())
+// 	require.NoError(t, err)
+// 	require.Equal(t, uint(2), count)
+// }

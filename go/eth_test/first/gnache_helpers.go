@@ -1,99 +1,166 @@
 package learning
 
 import (
-	"bytes"
-	"encoding/json"
+	"context"
 	"errors"
-	"fmt"
-	"net/http"
-	"net/url"
+	"math/big"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/rpc"
 )
 
 type Ganache struct {
-	address *url.URL
-	debug   bool
+	c                 *rpc.Client
+	eth               *ethclient.Client
+	initialSnapshotId int
 }
 
-func NewGanache(debug bool) *Ganache {
-	url, err := url.Parse("http://localhost:8545")
+func NewGanache() *Ganache {
+	client, err := rpc.Dial("http://localhost:8545")
+	panicOnError(err)
+	ganache := &Ganache{client, ethclient.NewClient(client), 0}
+	ganache.initialSnapshotId, err = ganache.TakeSnapshot()
+	panicOnError(err)
+	return ganache
+}
+
+func panicOnError(err error) {
 	if err != nil {
 		panic(err)
 	}
-	return &Ganache{url, debug}
 }
 
-// func (g *Ganache) NewGanacheWithBlocksToTime(blocksCount int, startBlockTime time.Time, blockInfo func(blockNo big.Int) int) (*ethclient.Client, *Ganache, func()) {
-// 	ganache := NewGanache()
-// 	lastBlockTime = time.Now()
-// 	ganache.IncreaseTime(startBlockTime.)
-// 	for i := 0; i < blocksCount; i++ {
-// 		blocDuration = blockInfo
-// 		_, err := ganache.IncreaseTime(blockchainDuration)
-// 		require.NoError(t, err)
-// 		_, err = ganache.MineTo(1)
-// 		require.NoError(t, err)
-// 	}
-// 	return client, ganache, tearDown
-// }
-
-type ganachePayload struct {
-	ID      int    `json:"id"`
-	Jsonrpc string `json:"jsonrpc"`
-	Method  string `json:"method"`
-	Params  []any  `json:"params"`
+type BlockInfo struct {
+	blockDuration time.Duration
 }
 
-func (g *Ganache) sendRequest(payload ganachePayload) (interface{}, error) {
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		return nil, err
-	}
-	body := bytes.NewReader(payloadBytes)
+const standardBlockDuration = time.Duration(12 * time.Second)
 
-	req, err := http.NewRequest("POST", g.address.String(), body)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	var response map[string]interface{}
-	err = json.NewDecoder(resp.Body).Decode(&response)
-	if err != nil {
-		return nil, err
-	}
-	if g.debug {
-		fmt.Printf("@dd sent: %s; rec: %#v\n", payloadBytes, response["result"])
-	}
-	return response["result"], nil
+func NewGanacheWithStandardBlocks(blocksCount int) *Ganache {
+	return NewGanacheWithBlocks(func(blockNo int) (blockInfo *BlockInfo, stop bool) {
+		if blockNo > blocksCount {
+			return nil, true
+		}
+		return &BlockInfo{standardBlockDuration}, false
+	})
 }
 
-func generatePayload(method string, params []any) ganachePayload {
-	return ganachePayload{
-		ID:      1337,
-		Jsonrpc: "2.0",
-		Method:  method,
-		Params:  params,
+type getBlockInfoCallback func(blockNo int) (blockInfo *BlockInfo, stop bool)
+
+// NewGanacheWithBlocks will mine blocks based on information returned by blockInfo function
+// TODO: start ganache from here with the genesis block time set. Use the command line to set the genesis block time then call this with current time for a proper approach
+func NewGanacheWithBlocks(blockInfo getBlockInfoCallback) *Ganache {
+	ganache := NewGanache()
+
+	err := MineBlocks(ganache, blockInfo)
+	panicOnError(err)
+
+	return ganache
+}
+
+// NewGanacheWithBlocks will mine blocks based on information returned by blockInfo function
+// TODO: start ganache from here with the genesis block time set. Use the command line to set the genesis block time then call this with current time for a proper approach
+func MineBlocks(ganache *Ganache, blockInfo getBlockInfoCallback) error {
+	lastHeader, err := ganache.eth.HeaderByNumber(context.Background(), nil)
+	if err != nil {
+		return err
+	}
+
+	currentTime := time.Unix(int64(lastHeader.Time), 0)
+	_, err = ganache.SetTime(currentTime)
+	if err != nil {
+		return err
+	}
+
+	blockNo := 1
+	for {
+		blockInfo, stop := blockInfo(blockNo)
+		if stop {
+			break
+		}
+		_, err := ganache.IncreaseTime(blockInfo.blockDuration)
+		if err != nil {
+			return err
+		}
+
+		_, err = ganache.MineBlocks(1)
+		if err != nil {
+			return err
+		}
+
+		currentTime = currentTime.Add(blockInfo.blockDuration)
+		blockNo++
+	}
+
+	return nil
+}
+
+// NewGanacheWithBlocksBatch same as NewGanacheWithBlocks just that calls are batched
+func NewGanacheWithBlocksBatch(blockInfo getBlockInfoCallback) *Ganache {
+	ganache := NewGanache()
+
+	header, err := ganache.eth.HeaderByNumber(context.Background(), big.NewInt(0))
+	panicOnError(err)
+
+	calls := make([]rpc.BatchElem, 0)
+
+	currentTime := time.Unix(int64(header.Time), 0)
+	calls = append(calls, prepareSetTimeCall(currentTime))
+	blockNo := 1
+	for {
+		blockInfo, stop := blockInfo(blockNo)
+		if stop {
+			break
+		}
+		calls = append(calls, prepareIncreaseTimeCall(blockInfo.blockDuration))
+		calls = append(calls, prepareMineCall(1))
+
+		currentTime = currentTime.Add(blockInfo.blockDuration)
+		blockNo++
+	}
+
+	err = ganache.c.BatchCall(calls)
+	for _, call := range calls {
+		if call.Error != nil {
+			panic(err)
+		}
+	}
+	return ganache
+}
+
+func (g *Ganache) Close() {
+	g.RevertSnapshot(g.initialSnapshotId)
+	g.c.Close()
+}
+
+func (g *Ganache) Client() *rpc.Client {
+	return g.c
+}
+
+func (g *Ganache) EthClient() *ethclient.Client {
+	return g.eth
+}
+
+func prepareCall(method string, params []any, result interface{}) rpc.BatchElem {
+	return rpc.BatchElem{
+		Method: method,
+		Args:   params,
+		Result: result,
 	}
 }
 
 func (g *Ganache) TakeSnapshot() (snapshotId int, err error) {
-	payload := generatePayload("evm_snapshot", []any{})
-	response, err := g.sendRequest(payload)
+	call := prepareCall("evm_snapshot", []any{}, new(string))
+	response := new(interface{})
+	err = g.c.Call(response, call.Method, call.Args...)
 	if err != nil {
 		return 0, err
 	}
-	res, err := strconv.ParseInt(strings.Replace(strings.ToLower(response.(string)), "0x", "", -1), 16, 16)
+	res, err := strconv.ParseInt(strings.Replace(strings.ToLower((*response).(string)), "0x", "", -1), 16, 16)
 	if err != nil {
 		return 0, err
 	}
@@ -101,15 +168,20 @@ func (g *Ganache) TakeSnapshot() (snapshotId int, err error) {
 }
 
 func (g *Ganache) RevertSnapshot(snapshotId int) error {
-	payload := generatePayload("evm_revert", []any{snapshotId})
-	response, err := g.sendRequest(payload)
+	call := prepareCall("evm_revert", []any{snapshotId}, new(bool))
+	response := new(interface{})
+	err := g.c.Call(response, call.Method, call.Args...)
 	if err != nil {
 		return err
 	}
-	if !response.(bool) {
+	if !(*response).(bool) {
 		return errors.New("failed to revert snapshot")
 	}
 	return nil
+}
+
+func prepareSetTimeCall(newTime time.Time) rpc.BatchElem {
+	return prepareCall("evm_setTime", []any{newTime.UnixMilli()}, new(float64))
 }
 
 // SetTime set the blockchain timestamp to a specific time
@@ -117,30 +189,42 @@ func (g *Ganache) RevertSnapshot(snapshotId int) error {
 // Beware - use this method cautiously as it allows you to move backwards in time, which may cause new blocks to appear
 // to be mined before older blocks, thereby invalidating the blockchain state.
 func (g *Ganache) SetTime(newTime time.Time) (offset time.Duration, err error) {
-	payload := generatePayload("evm_setTime", []any{newTime.UnixMilli()})
-	response, err := g.sendRequest(payload)
+	call := prepareSetTimeCall(newTime)
+	response := new(interface{})
+	err = g.c.Call(response, call.Method, call.Args...)
 	if err != nil {
 		return 0, err
 	}
-	return time.Duration(int64(response.(float64))) * time.Second, nil
+	return time.Duration(int64((*response).(float64))) * time.Second, nil
 }
 
+func prepareIncreaseTimeCall(duration time.Duration) rpc.BatchElem {
+	return prepareCall("evm_increaseTime", []any{"0x" + strconv.FormatInt(int64(duration.Seconds()), 16)}, new(float64))
+}
+
+// Increase the blockchain current timestamp by the specified amount of time in seconds
 func (g *Ganache) IncreaseTime(duration time.Duration) (adjustedTime time.Duration, err error) {
-	payload := generatePayload("evm_increaseTime", []any{"0x" + strconv.FormatInt(int64(duration.Seconds()), 16)})
-	response, err := g.sendRequest(payload)
+	call := prepareIncreaseTimeCall(duration)
+	response := new(interface{})
+	err = g.c.Call(response, call.Method, call.Args...)
 	if err != nil {
 		return 0, err
 	}
-	return time.Duration(int64(response.(float64))) * time.Second, nil
+	return time.Duration(int64((*response).(float64))) * time.Second, nil
+}
+
+func prepareMineCall(blockCount int) rpc.BatchElem {
+	return prepareCall("evm_mine", []any{map[string]any{"blocks": blockCount}}, new(string))
 }
 
 func (g *Ganache) MineBlocks(blockCount int) (int64, error) {
-	payload := generatePayload("evm_mine", []any{map[string]any{"blocks": blockCount}})
-	response, err := g.sendRequest(payload)
+	call := prepareMineCall(blockCount)
+	response := new(interface{})
+	err := g.c.Call(response, call.Method, call.Args...)
 	if err != nil {
 		return 0, err
 	}
-	res, err := strconv.ParseInt(strings.Replace(strings.ToLower(response.(string)), "0x", "", -1), 16, 16)
+	res, err := strconv.ParseInt(strings.Replace(strings.ToLower((*response).(string)), "0x", "", -1), 16, 16)
 	if err != nil {
 		return 0, err
 	}
@@ -148,13 +232,15 @@ func (g *Ganache) MineBlocks(blockCount int) (int64, error) {
 }
 
 func (g *Ganache) AvailableAddresses() ([]common.Address, error) {
-	payload := generatePayload("eth_accounts", []any{})
-	response, err := g.sendRequest(payload)
+	call := prepareCall("eth_accounts", []any{}, new(string))
+	response := new(interface{})
+	err := g.c.Call(response, call.Method, call.Args...)
 	if err != nil {
 		return nil, err
 	}
-	addresses := make([]common.Address, 0, len(response.([]interface{})))
-	for _, account := range response.([]interface{}) {
+
+	addresses := make([]common.Address, 0, len((*response).([]interface{})))
+	for _, account := range (*response).([]interface{}) {
 		addresses = append(addresses, common.HexToAddress(account.(string)))
 	}
 	return addresses, nil
