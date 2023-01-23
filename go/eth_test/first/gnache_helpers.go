@@ -245,3 +245,5 @@ func (g *Ganache) AvailableAddresses() ([]common.Address, error) {
 	}
 	return addresses, nil
 }
+
+// TODO add https://trufflesuite.github.io/ganache/#evm_addAccount endpoint support
