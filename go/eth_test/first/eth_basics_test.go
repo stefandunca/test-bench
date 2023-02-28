@@ -4,12 +4,15 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"io/ioutil"
+	"log"
 	"math/big"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
+	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -125,6 +128,7 @@ func TestGenerateNewWallet(t *testing.T) {
 	expectedPublicAddress := hexutil.Encode(hash.Sum(nil)[12:])
 
 	strAddress := crypto.PubkeyToAddress(*publicKeyECDSA)
+	// Test that PubkeyToAddress has the same result ad the known process
 	require.Equal(t, strings.ToUpper(expectedPublicAddress), strings.ToUpper(strAddress.Hex()))
 
 	// Validate that the existing test accounts have a valid public address
@@ -136,39 +140,87 @@ func TestGenerateNewWallet(t *testing.T) {
 	// TODO: extract public key for existing account and validate that it matches the testData.Addresses
 }
 
+// TODO: TestGenerateHDWallet using https://github.com/ethereum/go-ethereum/blob/master/accounts/hd.go
+
+// A keystore is a file containing an encrypted wallet private key. Keystores in go-ethereum can only contain one wallet key pair per file.
 func TestKeystores(t *testing.T) {
 	testDirPath := t.TempDir()
 	initialKeystorePath := filepath.Join(testDirPath, "keystore")
-	testSecrets := []string{"testSecret", "testSecret"}
+	testSecrets := []string{"testSecret1", "testSecret2"}
+	accToSecretIndex := make(map[common.Address]int, 2)
 
-	// Create a keystore with two accounts
-	{
-		ks := keystore.NewKeyStore(initialKeystorePath, keystore.LightScryptN, keystore.LightScryptP)
-		_, err := os.Stat(initialKeystorePath)
-		require.True(t, os.IsNotExist(err))
+	// Create a keystore
+	ks := keystore.NewKeyStore(initialKeystorePath, keystore.LightScryptN, keystore.LightScryptP)
+	_, err := os.Stat(initialKeystorePath)
+	// Keystore creation on't touch the filesystem, yet
+	require.True(t, os.IsNotExist(err))
+	for i, secret := range testSecrets {
+		// Generate a new wallet
+		acc, err := ks.NewAccount(secret)
+		require.NoError(t, err)
+		accToSecretIndex[acc.Address] = i
 
-		for i, secret := range testSecrets {
-			_, err = ks.NewAccount(secret)
-			require.NoError(t, err)
-
-			files, err := ioutil.ReadDir(initialKeystorePath)
-			require.NoError(t, err)
-			require.Equal(t, i, len(files))
-		}
+		// NewAccount should have created a new keystore file
+		files, err := ioutil.ReadDir(initialKeystorePath)
+		require.NoError(t, err)
+		require.Equal(t, i+1, len(files))
 	}
 
+	// Import an existing keystore into a new keystore
 	importedKeystorePath := filepath.Join(testDirPath, "imported_keystore")
 
-	// wronglyImportedKs := keystore.NewKeyStore(importedKeystorePath, keystore.StandardScryptN, keystore.StandardScryptP)
-	// _, err := os.Stat(keystorePath)
-	// require.True(t, os.IsNotExist(err))
-
 	importedKs := keystore.NewKeyStore(importedKeystorePath, keystore.LightScryptN, keystore.LightScryptP)
+
+	originalAccounts := ks.Accounts()
+
+	// Read all files from the initial keystore and validate that there is a matching account in the original keystore with the same file path
 	initialFiles, err := ioutil.ReadDir(initialKeystorePath)
 	require.NoError(t, err)
-
-	for _, ksFile := range initialFiles {
-		_, err := importedKs.Import([]byte(ksFile.Name()), testSecrets[ksFile], testSecrets[ksFile])
+	for i, ksFile := range initialFiles {
+		// Read keystore file
+		filePath := filepath.Join(initialKeystorePath, ksFile.Name())
+		jsonContent, err := ioutil.ReadFile(filePath)
 		require.NoError(t, err)
+
+		var acc accounts.Account
+		for _, acc = range originalAccounts {
+			if acc.URL.Path == filePath {
+				break
+			}
+		}
+		require.Equal(t, acc.URL.Path, filePath, "existing file found in the original keystore")
+
+		// Import keystore content in the new keystore
+		importedAcc, err := importedKs.Import(jsonContent, testSecrets[i], testSecrets[i])
+		require.NoError(t, err)
+		require.True(t, ks.HasAddress(importedAcc.Address))
+
+		err = ks.Delete(acc, testSecrets[accToSecretIndex[acc.Address]])
+		require.NoError(t, err)
+		_, err = os.Stat(filePath)
+		require.True(t, os.IsNotExist(err))
 	}
+}
+
+func TestAddressIsValid(t *testing.T) {
+	re := regexp.MustCompile("^0x[0-9a-fA-F]{40}$")
+
+	require.True(t, re.MatchString("0x323b5d4c32345ced77393b3530b1eed0f346429d"), "Address valid")
+	require.False(t, re.MatchString("0xZYXb5d4c32345ced77393b3530b1eed0f346429d"), "Address NOT valid")
+}
+
+func TestAddressIsFromASmartContract(t *testing.T) {
+	client, _, ganache, tearDown := testClient()
+	defer tearDown()
+
+	addresses, err := ganache.AvailableAddresses()
+	require.NoError(t, err)
+
+	bytecode, err := client.CodeAt(context.Background(), addresses[0], nil) // nil is latest block
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	isContract := len(bytecode) > 0
+	require.False(t, isContract, "Address is not a smart contract")
 }

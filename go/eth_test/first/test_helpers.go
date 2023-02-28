@@ -42,9 +42,9 @@ func testClientWithBlocks() (client *ethclient.Client, testData *ethTestData, ga
 }
 
 type TestTransaction struct {
-	From    common.Address
-	To      common.Address
-	Balance *big.Int
+	From  common.Address
+	To    common.Address
+	Value *big.Int
 }
 
 func generateTransactions(ganache *Ganache, blocksWithTransactions map[int][]TestTransaction) error {
@@ -65,9 +65,19 @@ func generateTransactions(ganache *Ganache, blocksWithTransactions map[int][]Tes
 	return err
 }
 
+func weiInEth() *big.Float {
+	return big.NewFloat(math.Pow10(18))
+}
+
 func balanceToEther(balance *big.Int) float64 {
-	res, _ := new(big.Float).Quo(new(big.Float).SetInt(balance), big.NewFloat(math.Pow10(18))).Float64()
+	res, _ := new(big.Float).Quo(new(big.Float).SetInt(balance), weiInEth()).Float64()
 	return res
+}
+
+func ethToWei(eth float64) *big.Int {
+	res := new(big.Float).Quo(big.NewFloat(eth), weiInEth())
+	weis, _ := res.Int(nil)
+	return weis
 }
 
 // Parse a json string list

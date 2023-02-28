@@ -41,21 +41,23 @@ ganache_out = b''
 done_reading_ganache = False
 
 script_dir = os.path.dirname(os.path.realpath(__file__))
-
-tests_args = ['go', 'test', '-v', f'{os.path.join(script_dir, "/*.go")}']
+tests_args = ['go', 'test']
 tests = None
 tests_out = b''
-tests_done_time = None
+tests_start_time = None
+tests_end_time = None
 
-
+home_dir = os.path.dirname(os.path.expanduser('~/'))
+stop_when_tests_end = True
 
 try:
-    while ganache.poll() is None:# and (tests_done_time is None or (time.time() - tests_done_time) < 1):
+    while ganache.poll() is None and not stop_when_tests_end or tests_end_time is None:
 
         # Handle ganache
         gOut = ganache.stdout.read1()
         if gOut != b'':
             ganache_out += gOut
+            print(f'@dd GANACHE: {gOut.decode("utf-8")}', end='')
 
         if not done_reading_ganache:
             if b'Listening on' in gOut:
@@ -65,23 +67,39 @@ try:
         # Handle tests
         if tests is None:
             if done_reading_ganache:
+                # ganache.terminate()
                 json_file_path = generate_test_file()
 
                 os.environ['TEST_DATA_FILE'] = json_file_path
-                print(f'Test data "{json_file_path}"')
+                os.environ['GOPATH'] = os.path.join(home_dir, "go")
+                os.environ['GOBIN'] = os.path.join(os.environ['GOPATH'], 'bin')
+                os.environ['PATH'] = os.environ['PATH'] + ":" + os.environ['GOBIN']
+                go_root = subprocess.Popen(['go', 'env', 'GOROOT'], stdout=subprocess.PIPE, env=os.environ)
+                os.environ['GOROOT'] = go_root.stdout.readline().decode("utf-8").strip()
 
-                tests = subprocess.Popen(tests_args, stdout=subprocess.PIPE, cwd=script_dir, env=os.environ)
+                tests_start_time = time.time()
+                tests = subprocess.Popen(tests_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=script_dir, env=os.environ)
+                os.set_blocking(tests.stdout.fileno(), False)
+                os.set_blocking(tests.stderr.fileno(), False)
         else:
-            tOut = tests.stdout.readline()
+            tOut = tests.stdout.read1()
             if tOut != b'':
-                print(tOut.decode("utf-8"), end='')
+                print(f'@dd TESTS  : {tOut.decode("utf-8")}', end='')
+            tOut = tests.stderr.read1()
+            if tOut != b'':
+                print(f'@dd TESTS  : {tOut.decode("utf-8")}', end='')
 
-            if tests.poll() is not None and tests_done_time is None:
-                tests_done_time = time.time()
+            if tests.poll() is not None and tests_end_time is None:
+                tests_end_time = time.time()
+
+            if stop_when_tests_end and tests_end_time is not None and (time.time() - tests_end_time) > 10:
+                break
 
         time.sleep(0.01)
 finally:
-    print(ganache_out.decode("utf-8"), end='')
+    print(f'DONE! tests run time (s): {tests_end_time - tests_start_time}')
 
-ganache.terminate()
-tests.terminate()
+if ganache:
+    ganache.terminate()
+if tests:
+    tests.terminate()
