@@ -1,4 +1,4 @@
-package learning
+package first
 
 import (
 	"encoding/json"
@@ -72,12 +72,6 @@ func weiInEth() *big.Float {
 func balanceToEther(balance *big.Int) float64 {
 	res, _ := new(big.Float).Quo(new(big.Float).SetInt(balance), weiInEth()).Float64()
 	return res
-}
-
-func ethToWei(eth float64) *big.Int {
-	res := new(big.Float).Quo(big.NewFloat(eth), weiInEth())
-	weis, _ := res.Int(nil)
-	return weis
 }
 
 // Parse a json string list

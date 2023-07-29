@@ -78,6 +78,7 @@ try:
                 os.environ['GOROOT'] = go_root.stdout.readline().decode("utf-8").strip()
 
                 tests_start_time = time.time()
+                print("@dd script_dir", script_dir)
                 tests = subprocess.Popen(tests_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=script_dir, env=os.environ)
                 os.set_blocking(tests.stdout.fileno(), False)
                 os.set_blocking(tests.stderr.fileno(), False)

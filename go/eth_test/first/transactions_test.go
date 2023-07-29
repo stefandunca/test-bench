@@ -1,4 +1,4 @@
-package learning
+package first
 
 import (
 	"context"
@@ -7,9 +7,11 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/stretchr/testify/require"
 )
 
@@ -102,9 +104,30 @@ func TestTransactionByHash(t *testing.T) {
 	fmt.Println("@dd tx to", tx.To().Hex()) // 0x55fE59D8Ad77035154dDd0AD0388D09Dd4047A8e
 }
 
+// See https://geth.ethereum.org/docs/developers/dapp-developer/native
 func TestTransactionCreate(t *testing.T) {
 	client, testData, _, tearDown := testClient()
 	defer tearDown()
+
+	ctx := context.Background()
+
+	getEventsCount := func() int {
+		blockNo, err := client.BlockNumber(ctx)
+		require.NoError(t, err)
+		lastNo := big.NewInt(int64(blockNo))
+
+		q := ethereum.FilterQuery{
+			FromBlock: lastNo,
+			ToBlock:   lastNo,
+			Topics:    [][]common.Hash{{common.HexToHash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")}},
+		}
+		logs, err := client.FilterLogs(context.Background(), q)
+		require.NoError(t, err)
+		return len(logs)
+	}
+
+	eventsCount := getEventsCount()
+	require.Equal(t, 0, eventsCount)
 
 	// load private key.
 	privateKey, err := crypto.HexToECDSA(testData.PrivateKeys[0][2:])
@@ -115,20 +138,40 @@ func TestTransactionCreate(t *testing.T) {
 	fromAddress := crypto.PubkeyToAddress(*senderPublicKeyECDSA)
 
 	// get the account nonce
-	nonce, err := client.PendingNonceAt(context.Background(), fromAddress)
+	nonce, err := client.PendingNonceAt(ctx, fromAddress)
 	require.NoError(t, err)
 
-	// get suggested gas price
 	gasLimit := uint64(21000)
-	gasPrice, err := client.SuggestGasPrice(context.Background())
+
+	tipCap, err := client.SuggestGasTipCap(ctx)
 	require.NoError(t, err)
-	fmt.Println("@dd gasPrice", gasPrice)
+
+	feeCap, err := client.SuggestGasPrice(ctx)
+	require.NoError(t, err)
 
 	// create transaction
-	value := ethToWei(1)
+	value := new(big.Int).Mul(big.NewInt(1), big.NewInt(params.Ether))
 	toAddress := common.HexToAddress(testData.Addresses[1])
-	types.NewTransaction(nonce, toAddress, value, gasLimit, gasPrice, nil)
+	chainID, err := client.ChainID(ctx)
+	require.NoError(t, err)
 
-	// sign the transaction with the private key of the sender
-	// broadcast the transaction
+	tx := types.NewTx(&types.DynamicFeeTx{
+		ChainID:   chainID,
+		Nonce:     nonce,
+		GasTipCap: tipCap,
+		GasFeeCap: feeCap,
+		Gas:       gasLimit,
+		To:        &toAddress,
+		Value:     value,
+		Data:      nil,
+	})
+	signedTx, err := types.SignTx(tx, types.NewLondonSigner(chainID), privateKey)
+	require.NoError(t, err)
+
+	// broadcast transaction
+	err = client.SendTransaction(ctx, signedTx)
+	require.NoError(t, err)
+
+	eventsCount = getEventsCount()
+	require.Equal(t, 0, eventsCount)
 }
