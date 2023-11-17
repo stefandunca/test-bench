@@ -3,19 +3,23 @@
 ]#
 
 import std/sugar
-from std/strutils import parseInt
+import json
 
-echo "OS: ", system.hostOS, "; CPU: ", system.hostCPU
-echo "Give me an interval. Start: "
-let st = parseInt(readLine(stdin))
-echo "End: "
-let en = parseInt(readLine(stdin))
+# Generate JsonNode from a string inline
+var j = parseJson("""
+  {
+    "name": "John",
+    "age": 30,
+    "cars": [
+      { "name":"Ford", "models":[ "Fiesta", "Focus", "Mustang" ] },
+      { "name":"BMW", "models":[ "320", "X3", "X5" ] },
+      { "name":"Fiat", "models":[ "500", "Panda" ] }
+    ]
+  }
+""")
 
-assert st < en and en < 10000
+proc print_two(x: string, y: string) =
+  echo "x = \"" & x & "\""
+  echo "y = \"" & y & "\""
 
-let all = collect(newSeq):
-    for i in countup(st, en):
-        if (i mod 2) == 0:
-            i
-
-echo "Range", all
+print_two($j["name"], $j["cars"])
