@@ -1,0 +1,1 @@
+# Test renamed ~~new~~ file
