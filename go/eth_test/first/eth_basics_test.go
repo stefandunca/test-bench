@@ -22,6 +22,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const anvilDefaultEthBalance = 10000
+
 func TestConvertAddresses(t *testing.T) {
 	strAddress := "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed"
 
@@ -38,9 +40,8 @@ func TestGetBalanceLastBlock(t *testing.T) {
 	balance, err := client.BalanceAt(context.Background(), addresses[0], nil)
 	require.NoError(t, err)
 
-	oneThousandEthAsWei, ok := new(big.Int).SetString("1000000000000000000000", 0)
-	require.True(t, ok)
-	require.Equal(t, 0, oneThousandEthAsWei.Cmp(balance), "balance should be 1000 ETH")
+	tenThousandsEthAsWei := ethToWei(anvilDefaultEthBalance)
+	require.Equal(t, 0, tenThousandsEthAsWei.Cmp(balance), "balance should be 1000 ETH")
 }
 
 func TestGetBalanceFirstBlock(t *testing.T) {
@@ -52,7 +53,7 @@ func TestGetBalanceFirstBlock(t *testing.T) {
 	balance, err := client.BalanceAt(context.Background(), addresses[0], big.NewInt(0))
 	require.NoError(t, err)
 
-	require.Equalf(t, 1000.0, balanceToEther(balance), "balance should be 1000 ETH")
+	require.Equalf(t, 10000.0, balanceToEther(balance), "balance should be 10000 ETH")
 }
 
 func TestHeaderByNumberLast(t *testing.T) {
@@ -88,7 +89,8 @@ func TestBlockByNumber(t *testing.T) {
 	require.Greater(t, lastBlock.Time(), firstBlock.Time(), "last timestamp should be greater than first timestamp")
 	require.Equal(t, 0, len(lastBlock.Transactions()), "no transactions expected, mined empty blocks")
 	require.True(t, strings.Contains(strings.ToLower(lastBlock.Hash().Hex()), "0x"))
-	require.Equal(t, uint64(1), lastBlock.Difficulty().Uint64())
+	// Anvil is a PoS network, so the difficulty is 0
+	require.Equal(t, uint64(0), lastBlock.Difficulty().Uint64())
 }
 
 func TestGenerateNewWallet(t *testing.T) {

@@ -2,15 +2,14 @@
 
 ```bash
 python3 first/test.py
+```
 
-# Or
+or to debug the output form `anvil`
 
-ganache-cli --networkId 1337 -m "much repair shock carbon improve miss forget sock include bullet interest solution"
+```bash
+anvil --port 8545
 
-# Run tests in the loop with data file
-nodemon --ext "*.go" --exec 'TEST_DATA_FILE="/Users/stefan/proj/test-bench/go/eth_test/first/test_data.json" sh -c "go test -v ./*.go" || exit 1'
-
-# Run tests in the loop without data file
+# Run tests in the loop
 nodemon --ext "*.go" --exec 'sh -c "go test -v ./*.go" || exit 1'
 
 # Run specific tests in the loop

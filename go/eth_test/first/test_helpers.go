@@ -1,15 +1,11 @@
 package first
 
 import (
-	"encoding/json"
 	"math"
 	"math/big"
-	"os"
-	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/stretchr/testify/require"
 )
 
 type ethTestData struct {
@@ -17,24 +13,30 @@ type ethTestData struct {
 	PrivateKeys []string `json:"private_keys"`
 }
 
-func testClient() (client *ethclient.Client, testData *ethTestData, ganache *Ganache, tearDown func()) {
-	optDataFilePath := os.Getenv("TEST_DATA_FILE")
-	if optDataFilePath != "" {
-		testData = readTestData(optDataFilePath)
+func testClient() (client *ethclient.Client, testData *ethTestData, ganache *Anvil, tearDown func()) {
+	ganache = StartAndConnect()
+	addresses, err := ganache.AvailableAddresses()
+	if err != nil {
+		panic(err)
 	}
-
-	ganache = NewGanache()
-	return ganache.EthClient(), testData, ganache, func() {
-		ganache.Close()
+	strAddresses := make([]string, 0, len(addresses))
+	for _, address := range addresses {
+		strAddresses = append(strAddresses, address.Hex())
 	}
+	return ganache.EthClient(), &ethTestData{
+			Addresses: strAddresses,
+			PrivateKeys: []string{
+				"0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+				"0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d",
+				"0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a",
+			},
+		},
+		ganache, func() {
+			ganache.Close()
+		}
 }
 
-func testClientWithBlocks() (client *ethclient.Client, testData *ethTestData, ganache *Ganache, tearDown func()) {
-	optDataFilePath := os.Getenv("TEST_DATA_FILE")
-	if optDataFilePath != "" {
-		testData = readTestData(optDataFilePath)
-	}
-
+func testClientWithBlocks() (client *ethclient.Client, testData *ethTestData, ganache *Anvil, tearDown func()) {
 	ganache = NewGanacheWithStandardBlocks(10)
 	return ganache.EthClient(), testData, ganache, func() {
 		ganache.Close()
@@ -47,7 +49,7 @@ type TestTransaction struct {
 	Value *big.Int
 }
 
-func generateTransactions(ganache *Ganache, blocksWithTransactions map[int][]TestTransaction) error {
+func generateTransactions(ganache *Anvil, blocksWithTransactions map[int][]TestTransaction) error {
 	processedBlocks := 0
 	err := MineBlocks(ganache, func(blockNo int) (blockInfo *BlockInfo, stop bool) {
 		if processedBlocks == len(blocksWithTransactions) {
@@ -65,36 +67,23 @@ func generateTransactions(ganache *Ganache, blocksWithTransactions map[int][]Tes
 	return err
 }
 
-func weiInEth() *big.Float {
+func weiInEthAsFloat() *big.Float {
 	return big.NewFloat(math.Pow10(18))
 }
 
-func balanceToEther(balance *big.Int) float64 {
-	res, _ := new(big.Float).Quo(new(big.Float).SetInt(balance), weiInEth()).Float64()
+func weiInEth() *big.Int {
+	res, accuracy := weiInEthAsFloat().Int(big.NewInt(1))
+	if accuracy != big.Exact {
+		panic("Unexpected loss of digits")
+	}
 	return res
 }
 
-// Parse a json string list
-func readTestData(json_file string) *ethTestData {
-	// read json file
-	file, err := os.Open(json_file)
-	if err != nil {
-		panic(err)
-	}
-	defer file.Close()
-
-	decoder := json.NewDecoder(file)
-	var data *ethTestData
-	err = decoder.Decode(&data)
-	if err != nil {
-		panic(err)
-	}
-	return data
+func ethToWei(eth int) *big.Int {
+	return new(big.Int).Mul(big.NewInt(int64(eth)), weiInEth())
 }
 
-func TestEthClientDial(t *testing.T) {
-	client, err := ethclient.Dial("http://localhost:8545")
-	require.NoError(t, err)
-
-	_ = client
+func balanceToEther(balance *big.Int) float64 {
+	res, _ := new(big.Float).Quo(new(big.Float).SetInt(balance), weiInEthAsFloat()).Float64()
+	return res
 }
