@@ -23,10 +23,10 @@ const (
 )
 
 type Anvil struct {
-	c   *rpc.Client
-	eth *ethclient.Client
-	// TODO: is anvil having this?
+	c                 *rpc.Client
+	eth               *ethclient.Client
 	initialSnapshotId int
+	cmd               *exec.Cmd
 }
 
 func isAnvilWorking() bool {
@@ -41,13 +41,27 @@ func isAnvilWorking() bool {
 	return err == nil && len(accounts) == 10
 }
 
-func startAnvil() error {
-	cmd := exec.Command("anvil", "--port", strconv.Itoa(anvilPort))
+func waitForAnvilToStart(client *rpc.Client, timeout time.Duration) (err error) {
+	start := time.Now()
+	for time.Since(start) < timeout {
+		if isAnvilWorking() {
+			err = client.Call(nil, "eth_chainId")
+			if err == nil {
+				return nil
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+	return fmt.Errorf("anvil did not start in %s; last error: %w", timeout, err)
+}
+
+func startAnvil() (*exec.Cmd, error) {
+	cmd := exec.Command("anvil", "--port", strconv.Itoa(anvilPort), "--timestamp", "1713900000", "--no-mining", "--silent")
 	err := cmd.Start()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	return cmd, nil
 }
 
 func stopAnvil() error {
@@ -64,23 +78,39 @@ func stopAnvil() error {
 }
 
 func StartAndConnect() *Anvil {
-	// TODO: keep track of connections and stop anvil when the last connection is closed
-	if !isAnvilWorking() {
-		err := startAnvil()
-		panicOnError(err)
+	var cmd *exec.Cmd
+	var err error
+	if isAnvilWorking() {
+		stopAnvil()
 	}
+
+	cmd, err = startAnvil()
+	panicOnError(err)
 
 	client, err := rpc.Dial(fmt.Sprintf("http://localhost:%d", anvilPort))
 	panicOnError(err)
-	ganache := &Anvil{client, ethclient.NewClient(client), 0}
-	ganache.initialSnapshotId, err = ganache.TakeSnapshot()
+	err = waitForAnvilToStart(client, 1*time.Second)
 	panicOnError(err)
-	return ganache
+	anvil := &Anvil{
+		c:   client,
+		eth: ethclient.NewClient(client),
+		cmd: cmd,
+	}
+
+	time.Sleep(100 * time.Millisecond)
+	anvil.initialSnapshotId, err = anvil.TakeSnapshot()
+	panicOnError(err)
+
+	return anvil
 }
 
 func (g *Anvil) StopAllInstances() {
-	err := stopAnvil()
-	panicOnError(err)
+	if g.cmd != nil {
+		err := stopAnvil()
+		panicOnError(err)
+		err = g.cmd.Wait()
+		panicOnError(err)
+	}
 }
 
 func panicOnError(err error) {
@@ -126,7 +156,7 @@ func MineBlocks(ganache *Anvil, getBlockInfo getBlockInfoCallback) error {
 	stop := false
 	var blockInfo *BlockInfo
 	calls := make([]rpc.BatchElem, 0)
-	for {
+	for !stop {
 		blockInfo, stop = getBlockInfo(blockNo)
 		if !stop {
 			blockCountInSlice++
@@ -136,11 +166,10 @@ func MineBlocks(ganache *Anvil, getBlockInfo getBlockInfoCallback) error {
 		if stop || prevBlockTime != blockInfo.blockDuration {
 			if blockCountInSlice > 0 {
 				calls = append(calls, prepareMineCall(blockCountInSlice, prevBlockTime))
-				if stop {
-					break
+				if !stop {
+					prevBlockTime = blockInfo.blockDuration
+					blockCountInSlice = 0
 				}
-				prevBlockTime = blockInfo.blockDuration
-				blockCountInSlice = 0
 			}
 		}
 		blockNo++
@@ -160,8 +189,9 @@ func MineBlocks(ganache *Anvil, getBlockInfo getBlockInfoCallback) error {
 }
 
 func (g *Anvil) Close() {
-	// TODO: call StopAllInstances if this is the last instance
-	g.RevertSnapshot(g.initialSnapshotId)
+	err := g.RevertSnapshot(g.initialSnapshotId)
+	panicOnError(err)
+	g.StopAllInstances()
 	g.c.Close()
 }
 

@@ -41,7 +41,7 @@ func TestGetBalanceLastBlock(t *testing.T) {
 	require.NoError(t, err)
 
 	tenThousandsEthAsWei := ethToWei(anvilDefaultEthBalance)
-	require.Equal(t, 0, tenThousandsEthAsWei.Cmp(balance), "balance should be 1000 ETH")
+	require.Equal(t, 0, tenThousandsEthAsWei.Cmp(balance), "balance should be 10000 ETH")
 }
 
 func TestGetBalanceFirstBlock(t *testing.T) {
