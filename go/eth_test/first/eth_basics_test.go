@@ -32,10 +32,10 @@ func TestConvertAddresses(t *testing.T) {
 }
 
 func TestGetBalanceLastBlock(t *testing.T) {
-	client, _, ganache, tearDown := testClientWithBlocks()
+	client, _, anvil, tearDown := testClientWithBlocks()
 	defer tearDown()
 
-	addresses, err := ganache.AvailableAddresses()
+	addresses, err := anvil.AvailableAddresses()
 	require.NoError(t, err)
 	balance, err := client.BalanceAt(context.Background(), addresses[0], nil)
 	require.NoError(t, err)
@@ -45,10 +45,10 @@ func TestGetBalanceLastBlock(t *testing.T) {
 }
 
 func TestGetBalanceFirstBlock(t *testing.T) {
-	client, _, ganache, tearDown := testClientWithBlocks()
+	client, _, anvil, tearDown := testClientWithBlocks()
 	defer tearDown()
 
-	addresses, err := ganache.AvailableAddresses()
+	addresses, err := anvil.AvailableAddresses()
 	require.NoError(t, err)
 	balance, err := client.BalanceAt(context.Background(), addresses[0], big.NewInt(0))
 	require.NoError(t, err)
@@ -212,10 +212,10 @@ func TestAddressIsValid(t *testing.T) {
 }
 
 func TestAddressIsFromASmartContract(t *testing.T) {
-	client, _, ganache, tearDown := testClient()
+	client, _, anvil, tearDown := testClient()
 	defer tearDown()
 
-	addresses, err := ganache.AvailableAddresses()
+	addresses, err := anvil.AvailableAddresses()
 	require.NoError(t, err)
 
 	bytecode, err := client.CodeAt(context.Background(), addresses[0], nil) // nil is latest block

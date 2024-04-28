@@ -10,29 +10,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupTestingWithGanache(ganache *Anvil) (*ethclient.Client, *Anvil, func()) {
-	client := ethclient.NewClient(ganache.Client())
-	return client, ganache, func() {
-		ganache.Close()
+func setupTestingWithAnvil(anvil *Anvil) (*ethclient.Client, *Anvil, func()) {
+	client := ethclient.NewClient(anvil.Client())
+	return client, anvil, func() {
+		anvil.Close()
 	}
 }
 
 func setupTesting(t *testing.T) (*ethclient.Client, *Anvil, func()) {
 	anvil := StartAndConnect()
-	return setupTestingWithGanache(anvil)
+	return setupTestingWithAnvil(anvil)
 }
 
-func TestGanacheAPIIncreaseTimeAndBulkMineAllNewBlocksHaveSameTimestamp(t *testing.T) {
-	client, ganache, tearDown := setupTesting(t)
+func TestAnvilAPIIncreaseTimeAndBulkMineAllNewBlocksHaveSameTimestamp(t *testing.T) {
+	client, anvil, tearDown := setupTesting(t)
 	defer tearDown()
 
 	blocksCount := 10
 	blockchainDuration := time.Duration(blocksCount*12) * time.Second
 
-	_, err := ganache.IncreaseTime(blockchainDuration)
+	_, err := anvil.IncreaseTime(blockchainDuration)
 	require.NoError(t, err)
 
-	err = ganache.MineBlocks(blocksCount, blockchainDuration)
+	err = anvil.MineBlocks(blocksCount, blockchainDuration)
 	require.NoError(t, err)
 
 	firstHeader, err := client.HeaderByNumber(context.Background(), big.NewInt(1))
@@ -54,15 +54,15 @@ func TestGanacheAPIIncreaseTimeAndBulkMineAllNewBlocksHaveSameTimestamp(t *testi
 	require.Error(t, err)
 }
 
-func TestGanacheAPICanControlBlockTimeByMiningBlockByBlock(t *testing.T) {
-	client, ganache, tearDown := setupTesting(t)
+func TestAnvilAPICanControlBlockTimeByMiningBlockByBlock(t *testing.T) {
+	client, anvil, tearDown := setupTesting(t)
 	defer tearDown()
 
 	blockTime := DefaultBlockTime
-	_, err := ganache.IncreaseTime(blockTime)
+	_, err := anvil.IncreaseTime(blockTime)
 	require.NoError(t, err)
 
-	err = ganache.MineBlocks(1, blockTime)
+	err = anvil.MineBlocks(1, blockTime)
 	require.NoError(t, err)
 
 	initialHeader, err := client.HeaderByNumber(context.Background(), big.NewInt(0))
@@ -74,10 +74,10 @@ func TestGanacheAPICanControlBlockTimeByMiningBlockByBlock(t *testing.T) {
 	require.GreaterOrEqual(t, int(firstHeader.Time-initialHeader.Time), int(blockTime.Seconds()))
 
 	delayBlocksMiningTime := time.Duration(15) * time.Second
-	_, err = ganache.IncreaseTime(delayBlocksMiningTime)
+	_, err = anvil.IncreaseTime(delayBlocksMiningTime)
 	require.NoError(t, err)
 
-	err = ganache.MineBlocks(1, blockTime)
+	err = anvil.MineBlocks(1, blockTime)
 	require.NoError(t, err)
 
 	secondHeader, err := client.HeaderByNumber(context.Background(), big.NewInt(2))

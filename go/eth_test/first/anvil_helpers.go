@@ -125,8 +125,8 @@ type BlockInfo struct {
 
 const standardBlockDuration = time.Duration(12 * time.Second)
 
-func NewGanacheWithStandardBlocks(blocksCount int) *Anvil {
-	return NewGanacheWithBlocks(func(blockNo int) (blockInfo *BlockInfo, stop bool) {
+func NewAnvilWithStandardBlocks(blocksCount int) *Anvil {
+	return NewAnvilWithBlocks(func(blockNo int) (blockInfo *BlockInfo, stop bool) {
 		if blockNo > blocksCount {
 			return nil, true
 		}
@@ -137,19 +137,18 @@ func NewGanacheWithStandardBlocks(blocksCount int) *Anvil {
 // getBlockInfoCallback should return stop == true and blockInfo == nil if should stop otherwise return blockInfo
 type getBlockInfoCallback func(blockNo int) (blockInfo *BlockInfo, stop bool)
 
-// NewGanacheWithBlocks will mine blocks based on information returned by blockInfo function
-// TODO: start ganache from here with the genesis block time set. Use the command line to set the genesis block time then call this with current time for a proper approach
-func NewGanacheWithBlocks(blockInfo getBlockInfoCallback) *Anvil {
-	ganache := StartAndConnect()
+// NewAnvilWithBlocks will mine blocks based on information returned by blockInfo function
+func NewAnvilWithBlocks(blockInfo getBlockInfoCallback) *Anvil {
+	anvil := StartAndConnect()
 
-	err := MineBlocks(ganache, blockInfo)
+	err := MineBlocks(anvil, blockInfo)
 	panicOnError(err)
 
-	return ganache
+	return anvil
 }
 
-// NewGanacheWithBlocks will mine blocks based on information returned by blockInfo function
-func MineBlocks(ganache *Anvil, getBlockInfo getBlockInfoCallback) error {
+// MineBlocks will mine blocks based on information returned by getBlockInfo function
+func MineBlocks(anvil *Anvil, getBlockInfo getBlockInfoCallback) error {
 	blockNo := 1
 	blockCountInSlice := 0
 	prevBlockTime := DefaultBlockTime
@@ -175,7 +174,7 @@ func MineBlocks(ganache *Anvil, getBlockInfo getBlockInfoCallback) error {
 		blockNo++
 	}
 
-	err := ganache.c.BatchCall(calls)
+	err := anvil.c.BatchCall(calls)
 	if err != nil {
 		return err
 	}

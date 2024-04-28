@@ -18,14 +18,14 @@ import (
 func TestTransactionQueryAllInBlock(t *testing.T) {
 	t.Skip("TODO: implement generateTransactions")
 
-	client, _, ganache, tearDown := testClient()
+	client, _, anvil, tearDown := testClient()
 	defer tearDown()
 
-	addresses, err := ganache.AvailableAddresses()
+	addresses, err := anvil.AvailableAddresses()
 	require.NoError(t, err)
 	require.Greater(t, len(addresses), 3)
 
-	err = generateTransactions(ganache,
+	err = generateTransactions(anvil,
 		map[int][]TestTransaction{
 			3: {
 				{
@@ -80,14 +80,14 @@ func TestTransactionQueryAllInBlock(t *testing.T) {
 
 func TestTransactionByHash(t *testing.T) {
 	t.Skip("TODO: implement generateTransactions")
-	client, _, ganache, tearDown := testClient()
+	client, _, anvil, tearDown := testClient()
 	defer tearDown()
 
-	addresses, err := ganache.AvailableAddresses()
+	addresses, err := anvil.AvailableAddresses()
 	require.NoError(t, err)
 	require.Greater(t, len(addresses), 3)
 
-	err = generateTransactions(ganache,
+	err = generateTransactions(anvil,
 		map[int][]TestTransaction{
 			2: {
 				{

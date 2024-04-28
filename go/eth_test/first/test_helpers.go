@@ -13,9 +13,9 @@ type ethTestData struct {
 	PrivateKeys []string `json:"private_keys"`
 }
 
-func testClient() (client *ethclient.Client, testData *ethTestData, ganache *Anvil, tearDown func()) {
-	ganache = StartAndConnect()
-	addresses, err := ganache.AvailableAddresses()
+func testClient() (client *ethclient.Client, testData *ethTestData, anvil *Anvil, tearDown func()) {
+	anvil = StartAndConnect()
+	addresses, err := anvil.AvailableAddresses()
 	if err != nil {
 		panic(err)
 	}
@@ -23,7 +23,7 @@ func testClient() (client *ethclient.Client, testData *ethTestData, ganache *Anv
 	for _, address := range addresses {
 		strAddresses = append(strAddresses, address.Hex())
 	}
-	return ganache.EthClient(), &ethTestData{
+	return anvil.EthClient(), &ethTestData{
 			Addresses: strAddresses,
 			PrivateKeys: []string{
 				"0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
@@ -31,15 +31,15 @@ func testClient() (client *ethclient.Client, testData *ethTestData, ganache *Anv
 				"0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a",
 			},
 		},
-		ganache, func() {
-			ganache.Close()
+		anvil, func() {
+			anvil.Close()
 		}
 }
 
-func testClientWithBlocks() (client *ethclient.Client, testData *ethTestData, ganache *Anvil, tearDown func()) {
-	ganache = NewGanacheWithStandardBlocks(10)
-	return ganache.EthClient(), testData, ganache, func() {
-		ganache.Close()
+func testClientWithBlocks() (client *ethclient.Client, testData *ethTestData, anvil *Anvil, tearDown func()) {
+	anvil = NewAnvilWithStandardBlocks(10)
+	return anvil.EthClient(), testData, anvil, func() {
+		anvil.Close()
 	}
 }
 
@@ -49,9 +49,9 @@ type TestTransaction struct {
 	Value *big.Int
 }
 
-func generateTransactions(ganache *Anvil, blocksWithTransactions map[int][]TestTransaction) error {
+func generateTransactions(anvil *Anvil, blocksWithTransactions map[int][]TestTransaction) error {
 	processedBlocks := 0
-	err := MineBlocks(ganache, func(blockNo int) (blockInfo *BlockInfo, stop bool) {
+	err := MineBlocks(anvil, func(blockNo int) (blockInfo *BlockInfo, stop bool) {
 		if processedBlocks == len(blocksWithTransactions) {
 			return nil, true
 		}
